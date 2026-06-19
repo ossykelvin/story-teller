@@ -6,20 +6,45 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT_DIR / ".env.local"
 load_dotenv(ENV_PATH)
 
+
+def _secret_value(key: str):
+    """Read from Streamlit secrets when available, otherwise environment variables.
+
+    Streamlit Cloud often uses st.secrets instead of a checked-in .env.local file.
+    This helper keeps local development and cloud deployment working the same way.
+    """
+    try:
+        import streamlit as st  # imported lazily so non-Streamlit tools still work
+        if hasattr(st, "secrets") and key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return os.getenv(key)
+
+
 def env(key: str, default: str = "") -> str:
-    return os.getenv(key, default)
+    value = _secret_value(key)
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value)
+
 
 def env_bool(key: str, default: bool = False) -> bool:
-    value = os.getenv(key)
+    value = _secret_value(key)
     if value is None:
         return default
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
 
 def env_int(key: str, default: int) -> int:
+    value = _secret_value(key)
+    if value is None:
+        return default
     try:
-        return int(os.getenv(key, str(default)))
+        return int(str(value))
     except ValueError:
         return default
+
 
 APP_NAME = env("APP_NAME", "Uncle Ossy StoryTeller")
 APP_PORT = env_int("APP_PORT", 8443)
@@ -49,9 +74,14 @@ THEME = {
 
 MODEL_KEYS = ["writing", "outline", "editing", "research", "continuity", "qa", "marketing", "export"]
 
+
 def get_model(provider: str, purpose: str) -> str:
     prefix = provider.upper()
-    return env(f"{prefix}_{purpose.upper()}_MODEL", "")
+    specific = env(f"{prefix}_{purpose.upper()}_MODEL", "")
+    if specific:
+        return specific
+    return env(f"{prefix}_WRITING_MODEL", "")
+
 
 def ensure_dirs() -> None:
     for path in [LOCAL_STORAGE_PATH, EXPORT_STORAGE_PATH, CUSTOM_STYLE_PATH, LOCAL_STORAGE_PATH / "projects"]:

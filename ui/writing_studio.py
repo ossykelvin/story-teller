@@ -8,6 +8,7 @@ from agents.chapter_writer import write_chapter, rewrite_chapter
 from agents.continuity_memory import summarize_chapter, check_contradictions, update_story_bible
 from agents.project_manager import can_generate_next, next_chapter_number
 from agents.story_qa_agent import qa_project
+from core.ai_client import AIClientError, provider_status
 
 
 def _chapter_title(content: str, chapter_number: int) -> str:
@@ -25,6 +26,9 @@ def render_writing_studio(provider: str):
     project = bundle["project"]
     st.markdown(f"## {project.get('title')}")
     st.caption(f"{project.get('project_type')} • {project.get('genre')} • {project.get('safe_style_profile')}")
+    status = provider_status()
+    if not status.get(f"{provider}_has_key", False):
+        st.warning(f"{provider.title()} is selected but its API key is not configured. Add it in .env.local or Streamlit secrets, or choose another provider in Settings.")
     tabs = st.tabs(["Outline", "Current Chapter", "Review & Approval", "Continuity", "Story QA", "Project JSON"])
 
     with tabs[0]:
@@ -35,7 +39,12 @@ def render_writing_studio(provider: str):
         c1, c2, c3 = st.columns(3)
         if c1.button("Generate Outline", type="primary"):
             with st.spinner("Generating outline..."):
-                outline_text = generate_outline(project, provider)
+                try:
+                    outline_text = generate_outline(project, provider)
+                except Exception as exc:
+                    st.error("Outline generation failed, but the app did not crash. Check provider API key/model settings or enable offline fallback.")
+                    st.code(str(exc))
+                    return
                 bundle["outline"] = {"content": outline_text, "approved": False, "created_at": now_iso()}
                 project["status"] = "outline"
                 save_project(project_id, bundle)
@@ -59,7 +68,12 @@ def render_writing_studio(provider: str):
         if st.button("Generate Next Chapter", disabled=not ok, type="primary"):
             with st.spinner("Writing chapter..."):
                 n = next_chapter_number(bundle["chapters"])
-                content = write_chapter(project, bundle["outline"].get("content", ""), bundle["story_bible"], bundle["chapters"], n, chapter_instruction, provider)
+                try:
+                    content = write_chapter(project, bundle["outline"].get("content", ""), bundle["story_bible"], bundle["chapters"], n, chapter_instruction, provider)
+                except Exception as exc:
+                    st.error("Chapter generation failed, but the app did not crash. Check provider API key/model settings or enable offline fallback.")
+                    st.code(str(exc))
+                    return
                 warnings = ""
                 try:
                     warnings = check_contradictions(project, bundle["story_bible"], bundle["chapters"], content, provider)
@@ -89,7 +103,12 @@ def render_writing_studio(provider: str):
                     st.error("Enter a tone first.")
                 else:
                     with st.spinner("Rewriting..."):
-                        draft["content"] = rewrite_chapter(project, draft.get("content", ""), tone, provider)
+                        try:
+                            draft["content"] = rewrite_chapter(project, draft.get("content", ""), tone, provider)
+                        except Exception as exc:
+                            st.error("Rewrite failed, but the app did not crash. Check provider API key/model settings or enable offline fallback.")
+                            st.code(str(exc))
+                            return
                         draft["title"] = _chapter_title(draft["content"], draft["chapter_number"])
                         save_project(project_id, bundle)
                         st.rerun()
@@ -113,9 +132,16 @@ def render_writing_studio(provider: str):
                     with st.spinner("Approving, summarising, and updating memory..."):
                         c["status"] = "approved"
                         c["approved_at"] = now_iso()
-                        c["summary"] = summarize_chapter(project, c.get("chapter_number"), c.get("content", ""), provider)
-                        update_json = update_story_bible(project, bundle["story_bible"], c.get("chapter_number"), c["summary"], provider)
-                        bundle["story_bible"] = safe_json_loads(update_json, bundle["story_bible"])
+                        try:
+                            c["summary"] = summarize_chapter(project, c.get("chapter_number"), c.get("content", ""), provider)
+                            update_json = update_story_bible(project, bundle["story_bible"], c.get("chapter_number"), c["summary"], provider)
+                            bundle["story_bible"] = safe_json_loads(update_json, bundle["story_bible"])
+                        except Exception as exc:
+                            st.error("Approval memory update failed, but the app did not crash. The chapter was left as draft.")
+                            st.code(str(exc))
+                            c["status"] = "draft"
+                            c["approved_at"] = ""
+                            return
                         project["current_chapter"] = min(int(project.get("chapter_count", 1)), c.get("chapter_number") + 1)
                         if c.get("chapter_number") >= int(project.get("chapter_count", 1)):
                             project["status"] = "completed"
@@ -139,7 +165,12 @@ def render_writing_studio(provider: str):
         st.subheader("Story QA")
         if st.button("Run Story QA Report"):
             with st.spinner("Running QA review..."):
-                report = qa_project(project, bundle["outline"].get("content", ""), bundle["story_bible"], bundle["chapters"], provider)
+                try:
+                    report = qa_project(project, bundle["outline"].get("content", ""), bundle["story_bible"], bundle["chapters"], provider)
+                except Exception as exc:
+                    st.error("Story QA failed, but the app did not crash. Check provider API key/model settings or enable offline fallback.")
+                    st.code(str(exc))
+                    return
                 bundle["qa_reports"].append({"created_at": now_iso(), "report": report})
                 save_project(project_id, bundle)
                 st.session_state.last_qa_report = report

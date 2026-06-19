@@ -71,3 +71,33 @@ Each project has:
 - Shared Supabase backend for Streamlit, Vercel, and mobile
 - Team/collaboration mode
 - Cover image generation
+
+## Streamlit Cloud provider setup
+
+If deployed on Streamlit Cloud, configure secrets under **Manage app → Settings → Secrets**. The app now reads both `.env.local` and `st.secrets`.
+
+Minimum OpenRouter example:
+
+```toml
+OPENROUTER_API_KEY="your-key"
+OPENROUTER_WRITING_MODEL="openai/gpt-4o-mini"
+OPENROUTER_OUTLINE_MODEL="openai/gpt-4o-mini"
+OPENROUTER_EDITING_MODEL="openai/gpt-4o-mini"
+OPENROUTER_CONTINUITY_MODEL="openai/gpt-4o-mini"
+OPENROUTER_QA_MODEL="openai/gpt-4o-mini"
+OPENROUTER_MARKETING_MODEL="openai/gpt-4o-mini"
+```
+
+Minimum Gemini fallback example:
+
+```toml
+GEMINI_API_KEY="your-key"
+GEMINI_WRITING_MODEL="gemini-1.5-flash"
+GEMINI_OUTLINE_MODEL="gemini-1.5-flash"
+GEMINI_EDITING_MODEL="gemini-1.5-flash"
+GEMINI_CONTINUITY_MODEL="gemini-1.5-flash"
+GEMINI_QA_MODEL="gemini-1.5-flash"
+GEMINI_MARKETING_MODEL="gemini-1.5-flash"
+```
+
+If generation fails, open the **Settings** page and check Provider health. The app will now show a safe, readable error instead of crashing with a redacted Streamlit exception.
